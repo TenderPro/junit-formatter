@@ -207,13 +207,33 @@ defmodule JUnitFormatter do
     body =
       test
       |> ExUnit.Formatter.format_test_failure(failures, idx, :infinity, fn _, msg -> msg end)
-      |> :erlang.binary_to_list()
+      |> :unicode.characters_to_list()
 
     [{:failure, [message: message(failures)], [body]}]
   end
 
-  defp generate_test_body(%ExUnit.Test{state: {:invalid, %name{} = module}}, _idx),
-    do: [{:error, [message: "Invalid module #{name}"], ['#{inspect(module)}']}]
+  defp generate_test_body(%ExUnit.Test{state: {:invalid, %name{} = module}}, _idx) do
+    tests =
+      for test <- module.tests do
+        attrs = test
+          |> Map.to_list()
+          |> Keyword.drop([:__struct__, :tags])
+          |> Enum.map(fn {k, v} -> {k, "#{inspect v}"} end)
+          |> Enum.into([])
+
+        tags = test.tags
+          |> Map.to_list()
+          |> Enum.map(fn {k, v} -> {k, "#{inspect v}"} end)
+          |> Enum.into([])
+
+        {:test, attrs, [{:tags, tags, []}]}
+      end
+
+    [{:error, [message: "Invalid module #{module.name}"], [
+      {:module_state, [], [:unicode.characters_to_list("#{inspect(module.state)}")]},
+      {:module_tests, [], tests}
+    ]}]
+  end
 
   defp message([msg | _]), do: message(msg)
   defp message({_, %ExUnit.AssertionError{message: reason}, _}), do: reason
